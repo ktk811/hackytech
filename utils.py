@@ -135,11 +135,27 @@ def add_expense(username, description, amount, date=None, category=None, expense
 
 from datetime import datetime
 
+from datetime import datetime
+
 def add_funds(username, amount, description="Deposit"):
     """Add funds to user's balance."""
-    db = get_db()  # Ensure get_db() returns your MongoDB database instance
-
-    # Create a fund entry document
+    # Get the SQLite connection from your get_db() function
+    db = get_db()
+    
+    # Create the fund_transactions table if it doesn't exist
+    db.execute('''
+    CREATE TABLE IF NOT EXISTS fund_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        amount REAL NOT NULL,
+        description TEXT,
+        date TEXT NOT NULL,
+        FOREIGN KEY (username) REFERENCES users(username)
+    )
+    ''')
+    db.commit()
+    
+    # Create the fund entry dictionary with the current timestamp
     fund_entry = {
         "username": username,
         "amount": float(amount),
@@ -147,14 +163,22 @@ def add_funds(username, amount, description="Deposit"):
         "date": datetime.now().isoformat()
     }
     
-    # Insert the fund entry into the MongoDB collection 'fund_transactions'
-    db.fund_transactions.insert_one(fund_entry)
+    # Insert the new fund entry into the fund_transactions table using SQL
+    cursor = db.cursor()
+    cursor.execute('''
+    INSERT INTO fund_transactions (username, amount, description, date)
+    VALUES (?, ?, ?, ?)
+    ''', (fund_entry["username"], fund_entry["amount"], fund_entry["description"], fund_entry["date"]))
+    db.commit()
+    
+    # Optionally, add the newly created record's ID into the dictionary
+    fund_entry["id"] = cursor.lastrowid
     
     # Update the user's balance with the new deposit
     update_balance(username, float(amount))
     
     # Add FinPet XP for adding funds (savings behavior)
-    # More XP for larger deposits: 1 XP per $50 deposited, capped at 10 XP
+    # 1 XP per $50 deposited, capped at 10 XP
     xp_amount = min(10, int(float(amount) / 50))
     if xp_amount > 0:
         add_finpet_xp(username, xp_amount)
@@ -163,10 +187,11 @@ def add_funds(username, amount, description="Deposit"):
     funds = get_user_funds(username)
     current_balance = funds.get("balance", 0)
     
-    # Check if the user qualifies for savings rewards based on their current balance
+    # Check if the user qualifies for savings rewards
     check_and_add_savings_rewards(username, current_balance)
     
     return fund_entry
+
 
 
 def update_balance(username, amount_change):
