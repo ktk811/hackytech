@@ -110,15 +110,13 @@ else:
         st.title("💰 Personal Finance Manager")
     
     with header_col2:
-        # User profile and logout in the top-right corner
-        with st.container():
-            st.markdown(f"""
-            <div class="user-info">
-                <span>👤 {st.session_state.username}</span>
-                <span style="margin-left: 10px;">|</span>
-                <span style="cursor: pointer; color: #FF5252;" onclick="logout()">Logout</span>
-            </div>
-            """, unsafe_allow_html=True)
+        st.write(f"👤 {st.session_state.username}")
+        if st.button("Logout", key="logout_top"):
+            logout()
+            st.session_state.logged_in = False
+            st.session_state.username = None
+            st.rerun()
+
     
     # Horizontal navigation menu with functional buttons
     nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
