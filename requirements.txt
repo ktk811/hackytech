@@ -1,4 +1,6 @@
 streamlit
+pymongo
+scikit-learn
 pandas
-altair
-matplotlib
+openai
+python-dotenv
