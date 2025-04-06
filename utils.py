@@ -3,11 +3,16 @@ import pandas as pd
 from datetime import datetime, timedelta
 import altair as alt
 import matplotlib.pyplot as plt
-from database import get_db
 import random
 import json
 from ml_models import predict_expense_type, predict_expense_category
 from datetime import datetime
+import sqlite3
+
+def get_db():
+    # Connect to (or create) your SQLite database file
+    conn = sqlite3.connect("finance.db", check_same_thread=False)
+    return conn
 # ------------------------
 # Database utility functions
 # ------------------------
