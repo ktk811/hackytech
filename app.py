@@ -1,7 +1,8 @@
 import streamlit as st
 import os
+import sqlite3
 
-# Set page config must be the first Streamlit command
+# Set page config; must be the first Streamlit command
 st.set_page_config(
     page_title="Personal Finance Manager",
     page_icon="💰",
@@ -19,12 +20,43 @@ def load_css():
 # Apply custom styling
 load_css()
 
-import os
+# --- SQLite Database Initialization ---
+def initialize_db():
+    # Create (or open) the SQLite database file
+    conn = sqlite3.connect("database.db", check_same_thread=False)
+    cursor = conn.cursor()
+
+    # Create users table if it does not exist
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT
+    )
+    """)
+
+    # Create expenses table if it does not exist
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        category TEXT,
+        amount REAL,
+        date TEXT
+    )
+    """)
+    conn.commit()
+    return conn
+
+# Global database connection (SQLite)
+db_conn = initialize_db()
+
+# --- Import Modules for Authentication and Utility Functions ---
+# Update these modules (auth.py, utils.py, etc.) so that they use SQLite and SQL queries
 from auth import login, register, is_authenticated, logout
-from database import initialize_db
 import utils
 
-# Initialize session state variables
+# --- Initialize Session State Variables ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
@@ -34,10 +66,10 @@ if "theme_mode" not in st.session_state:
 if "zen_mode" not in st.session_state:
     st.session_state.zen_mode = False
 
-# Initialize database
-initialize_db()
+# Optionally, store the database connection in session state (if your modules expect it)
+st.session_state.db_conn = db_conn
 
-# Authentication screens
+# --- Authentication Screens ---
 def show_login_page():
     st.title("🔐 Login to Your Finance Dashboard")
     
@@ -48,11 +80,11 @@ def show_login_page():
         
         if submit_button:
             if username and password:
-                if login(username, password):
+                if login(username, password):  # Ensure login() is updated to use SQLite
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.success(f"Welcome back, {username}!")
-                    st.rerun()
+                    st.experimental_rerun()
                 else:
                     st.error("Invalid username or password. Please try again.")
             else:
@@ -62,7 +94,7 @@ def show_login_page():
     st.markdown("Don't have an account?")
     if st.button("Register"):
         st.session_state.show_registration = True
-        st.rerun()
+        st.experimental_rerun()
 
 def show_registration_page():
     st.title("📝 Create Your Account")
@@ -78,10 +110,10 @@ def show_registration_page():
                 if password != confirm_password:
                     st.error("Passwords do not match. Please try again.")
                 else:
-                    if register(username, password):
+                    if register(username, password):  # Ensure register() uses SQLite
                         st.success("Registration successful! Please login.")
                         st.session_state.show_registration = False
-                        st.rerun()
+                        st.experimental_rerun()
                     else:
                         st.error("Username already exists. Please choose another one.")
             else:
@@ -91,9 +123,9 @@ def show_registration_page():
     st.markdown("Already have an account?")
     if st.button("Login"):
         st.session_state.show_registration = False
-        st.rerun()
+        st.experimental_rerun()
 
-# Main app flow
+# --- Main App Flow ---
 if not st.session_state.logged_in:
     if "show_registration" not in st.session_state:
         st.session_state.show_registration = False
@@ -103,7 +135,7 @@ if not st.session_state.logged_in:
     else:
         show_login_page()
 else:
-    # Create a header with user info and horizontal navigation
+    # Header with user info and horizontal navigation
     header_col1, header_col2 = st.columns([3, 1])
     
     with header_col1:
@@ -115,15 +147,13 @@ else:
             logout()
             st.session_state.logged_in = False
             st.session_state.username = None
-            st.rerun()
+            st.experimental_rerun()
 
-    
     # Horizontal navigation menu with functional buttons
     nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
     
     with nav_col1:
-        nav_container1 = st.container()
-        with nav_container1:
+        with st.container():
             st.markdown('<div class="horizontal-nav">', unsafe_allow_html=True)
             home = st.button("📊 Dashboard", key="nav_home", use_container_width=True)
             add_expense = st.button("➕ Add Expense", key="nav_add_expense", use_container_width=True)
@@ -135,8 +165,7 @@ else:
                 st.switch_page("pages/02_Add_Expense.py")
     
     with nav_col2:
-        nav_container2 = st.container()
-        with nav_container2:
+        with st.container():
             st.markdown('<div class="horizontal-nav">', unsafe_allow_html=True)
             funds_goals = st.button("💵 Funds & Goals", key="nav_funds_goals", use_container_width=True)
             expense_history = st.button("📜 History", key="nav_history", use_container_width=True)
@@ -148,8 +177,7 @@ else:
                 st.switch_page("pages/04_Expense_History.py")
     
     with nav_col3:
-        nav_container3 = st.container()
-        with nav_container3:
+        with st.container():
             st.markdown('<div class="horizontal-nav">', unsafe_allow_html=True)
             finpet = st.button("🐾 FinPet", key="nav_finpet", use_container_width=True)
             weekly_wants = st.button("🛍️ Weekly Wants", key="nav_weekly", use_container_width=True)
@@ -161,8 +189,7 @@ else:
                 st.switch_page("pages/06_Weekly_Wants.py")
     
     with nav_col4:
-        nav_container4 = st.container()
-        with nav_container4:
+        with st.container():
             st.markdown('<div class="horizontal-nav">', unsafe_allow_html=True)
             ai_chatbot = st.button("🤖 AI Assistant", key="nav_chatbot", use_container_width=True)
             zen_mode = st.button("🧘 Zen Mode", key="nav_zen", use_container_width=True)
@@ -199,7 +226,7 @@ else:
             logout()
             st.session_state.logged_in = False
             st.session_state.username = None
-            st.rerun()
+            st.experimental_rerun()
     
     # Divider after navigation
     st.markdown("<hr style='margin: 1rem 0; border-color: #E0E0E0;'>", unsafe_allow_html=True)
@@ -227,7 +254,7 @@ else:
     with col2:
         st.info("Click on any of the navigation links above to access different features.")
         
-        # Quick stats
+        # Quick stats (ensure these functions are updated to use SQLite queries)
         st.metric(label="Current Balance", value=f"${utils.get_current_balance():.2f}")
         st.metric(
             label="This Week's Expenses", 
