@@ -10,47 +10,52 @@ def hash_password(password):
 def register(username, password):
     """Register a new user."""
     db = get_db()
-    cursor = db.cursor()
     
     # Check if username already exists
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-    if cursor.fetchone() is not None:
+    if db.users.find_one({"username": username}):
         return False
     
     # Hash the password
     hashed_password = hash_password(password)
     
     # Store the new user
-    cursor.execute(
-        "INSERT INTO users (username, password, zen_mode, wants_budget) VALUES (?, ?, ?, ?)",
-        (username, hashed_password, 0, 100.0)
-    )
+    user = {
+        "username": username,
+        "password": hashed_password,
+        "zen_mode": 0,           # SQLite uses integers for booleans
+        "wants_budget": 100.0    # Default weekly budget for wants
+    }
+    db.users.insert_one(user)
     
     # Initialize user's funds
-    cursor.execute(
-        "INSERT INTO funds (username, balance) VALUES (?, ?)",
-        (username, 0)
-    )
+    funds = {
+        "username": username,
+        "balance": 0
+    }
+    db.funds.insert_one(funds)
     
     # Get current time as string for SQLite
     current_time = datetime.now().isoformat()
     
     # Initialize FinPet
-    cursor.execute(
-        "INSERT INTO finpet (username, level, xp, next_level_xp, name, last_fed) VALUES (?, ?, ?, ?, ?, ?)",
-        (username, 1, 0, 100, "Penny", current_time)
-    )
+    finpet = {
+        "username": username,
+        "level": 1,
+        "xp": 0,
+        "next_level_xp": 100,
+        "name": "Penny",
+        "last_fed": current_time,
+        "rewards": "[]"  # Store rewards as JSON-formatted string
+    }
+    db.finpet.insert_one(finpet)
     
-    db.commit()
     return True
 
 def login(username, password):
     """Verify username and password."""
     db = get_db()
-    cursor = db.cursor()
     
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-    user = cursor.fetchone()
+    user = db.users.find_one({"username": username})
     if not user:
         return False
     
