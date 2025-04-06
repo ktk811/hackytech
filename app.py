@@ -94,7 +94,7 @@ def show_login_page():
     st.markdown("Don't have an account?")
     if st.button("Register"):
         st.session_state.show_registration = True
-        st.experimental_rerun()
+        st.rerun()
 
 def show_registration_page():
     st.title("📝 Create Your Account")
@@ -126,6 +126,11 @@ def show_registration_page():
         st.experimental_rerun()
 
 # --- Main App Flow ---
+# Initialize session state for login status
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+# Conditional rendering based on login state
 if not st.session_state.logged_in:
     if "show_registration" not in st.session_state:
         st.session_state.show_registration = False
@@ -135,7 +140,7 @@ if not st.session_state.logged_in:
     else:
         show_login_page()
 else:
-    # Header with user info and horizontal navigation
+    # Header with user info and navigation
     header_col1, header_col2 = st.columns([3, 1])
     
     with header_col1:
@@ -147,8 +152,7 @@ else:
             logout()
             st.session_state.logged_in = False
             st.session_state.username = None
-            st.experimental_rerun()
-
+            st.rerun()  # <-- Updated here
     # Horizontal navigation menu with functional buttons
     nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
     
