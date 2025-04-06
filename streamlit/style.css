@@ -1,0 +1,124 @@
+/* Main theme colors */
+:root {
+    --primary-color: #4CAF50;
+    --bg-color: #F0F8FF;
+    --text-color: #262730;
+    --secondary-bg: #E0F7FA;
+    --accent-color: #FF9800;
+    --error-color: #F44336;
+    --success-color: #4CAF50;
+    --warning-color: #FFC107;
+    --info-color: #2196F3;
+}
+/* General styling */
+body {
+    font-family: 'Source Sans Pro', sans-serif;
+    color: var(--text-color);
+}
+/* Horizontal navigation styling */
+.horizontal-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.horizontal-nav button {
+    background-color: var(--secondary-bg);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    transition: all 0.3s;
+    font-weight: 500;
+}
+.horizontal-nav button:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+/* User info styling */
+.user-info {
+    text-align: right;
+    padding: 5px 10px;
+    font-size: 14px;
+    background-color: var(--secondary-bg);
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+/* Metric cards */
+div[data-testid="stMetric"] {
+    background-color: var(--secondary-bg);
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+}
+div[data-testid="stMetric"] label {
+    font-weight: bold;
+}
+/* Form styling */
+div[data-testid="stForm"] {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #eaeaea;
+}
+/* Progress bars */
+div[data-testid="stProgress"] > div {
+    background-color: var(--primary-color);
+}
+/* Improve expander styling */
+details {
+    background-color: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+details summary {
+    padding: 10px;
+    cursor: pointer;
+    font-weight: 600;
+}
+details[open] {
+    padding-bottom: 10px;
+}
+/* Button styling */
+button[kind="primary"] {
+    background-color: var(--primary-color);
+}
+button[kind="secondary"] {
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+/* Nice tables */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+th {
+    background-color: var(--primary-color);
+    color: white;
+    text-align: left;
+    padding: 8px;
+}
+td {
+    border-bottom: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+/* Chat interface styling */
+div.stChatMessage {
+    padding: 10px 15px;
+    border-radius: 15px;
+    margin-bottom: 5px;
+}
+div.stChatMessage[data-testid="user-message"] {
+    background-color: var(--primary-color);
+    color: white;
+    border-top-right-radius: 0;
+}
+div.stChatMessage:not([data-testid="user-message"]) {
+    background-color: #e9e9eb;
+    border-top-left-radius: 0;
+}
