@@ -84,7 +84,7 @@ def show_login_page():
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.success(f"Welcome back, {username}!")
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Invalid username or password. Please try again.")
             else:
@@ -113,7 +113,7 @@ def show_registration_page():
                     if register(username, password):  # Ensure register() uses SQLite
                         st.success("Registration successful! Please login.")
                         st.session_state.show_registration = False
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error("Username already exists. Please choose another one.")
             else:
@@ -123,7 +123,7 @@ def show_registration_page():
     st.markdown("Already have an account?")
     if st.button("Login"):
         st.session_state.show_registration = False
-        st.experimental_rerun()
+        st.rerun()
 
 # --- Main App Flow ---
 # Initialize session state for login status
@@ -230,7 +230,7 @@ else:
             logout()
             st.session_state.logged_in = False
             st.session_state.username = None
-            st.experimental_rerun()
+            st.rerun()
     
     # Divider after navigation
     st.markdown("<hr style='margin: 1rem 0; border-color: #E0E0E0;'>", unsafe_allow_html=True)
