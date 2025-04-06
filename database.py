@@ -16,11 +16,13 @@ def get_db_path():
     return "finance_tracker.db"
 
 def initialize_db():
-    """Initialize the database connection."""
+    """Initialize the SQLite database connection and create required tables if they don't exist."""
     try:
         # Connect to SQLite database with check_same_thread=False for Streamlit's threaded environment
         db_path = get_db_path()
         conn = sqlite3.connect(db_path, check_same_thread=False)
+        # Configure row_factory to access rows as dictionaries
+        conn.row_factory = sqlite3.Row
         
         # Create tables if they don't exist
         cursor = conn.cursor()
@@ -108,18 +110,18 @@ def initialize_db():
         return False
 
 def get_db():
-    """Get the database instance with MongoDB-like interface."""
+    """Get the SQLite database instance with a document-like interface for compatibility."""
     # Check if we have a connection in thread_local storage
     if not hasattr(thread_local, 'conn'):
         # If not, initialize the database
         initialize_db()
     
-    # Create a class that mimics MongoDB collections for compatibility
+    # Create a class that provides a document-style interface using SQLite
     class Collection:
         def __init__(self, conn, table_name):
             self.conn = conn
             self.table_name = table_name
-            self._conn = conn  # For utils.py to access
+            self._conn = conn  # For compatibility with other modules
             self._sort_field = None
             self._sort_direction = None
             self._projection = None
@@ -131,50 +133,38 @@ def get_db():
             if 'id' in query:
                 cursor.execute(f"SELECT * FROM {self.table_name} WHERE id = ?", (query['id'],))
                 result = cursor.fetchone()
-                
                 if result:
-                    # Get column names
-                    column_names = [description[0] for description in cursor.description]
-                    # Create a dictionary from column names and values
-                    return dict(zip(column_names, result))
+                    # Convert sqlite3.Row to dictionary
+                    return dict(result)
                 return None
             
             # Handle username query (most common case)
             if 'username' in query:
                 cursor.execute(f"SELECT * FROM {self.table_name} WHERE username = ?", (query['username'],))
                 result = cursor.fetchone()
-                
                 if result:
-                    # Get column names
-                    column_names = [description[0] for description in cursor.description]
-                    # Create a dictionary from column names and values
-                    return dict(zip(column_names, result))
+                    return dict(result)
                 return None
             
             return None
         
         def insert_one(self, document):
             cursor = self.conn.cursor()
-            
             # Extract keys and values
             keys = list(document.keys())
             values = list(document.values())
-            
             placeholders = ', '.join(['?' for _ in keys])
             columns = ', '.join(keys)
             
             # Insert the document
             cursor.execute(f"INSERT INTO {self.table_name} ({columns}) VALUES ({placeholders})", values)
             self.conn.commit()
-            
             # Get last inserted id
             last_id = cursor.lastrowid
-            
             return {"id": last_id}
         
         def update_one(self, query, update):
             cursor = self.conn.cursor()
-            
             # Handle the $set operator (most common case)
             if '$set' in update:
                 set_values = update['$set']
@@ -194,37 +184,27 @@ def get_db():
                     cursor.execute(f"UPDATE {self.table_name} SET {set_clause} WHERE id = ?", values)
                     self.conn.commit()
                     return True
-            
             return False
         
         def find(self, query=None, projection=None):
             cursor = self.conn.cursor()
             self._projection = projection
-            
             # Build the SQL query
             fields = "*"
             if projection:
-                # Format projection fields
-                projection_fields = []
-                for field, include in projection.items():
-                    if include:
-                        projection_fields.append(field)
+                projection_fields = [field for field, include in projection.items() if include]
                 if projection_fields:
                     fields = ", ".join(projection_fields)
-            
             sql_query = f"SELECT {fields} FROM {self.table_name}"
             params = []
-            
             # Build WHERE clause
             where_clauses = []
-            
             if query:
                 # Handle basic username query
                 if 'username' in query:
                     where_clauses.append("username = ?")
                     params.append(query['username'])
-                
-                # Handle $gte and $lte operators for date ranges
+                # Handle $gte and $lte operators for date ranges or numeric fields
                 for key, value in query.items():
                     if isinstance(value, dict):
                         for op, op_value in value.items():
@@ -234,58 +214,44 @@ def get_db():
                             elif op == '$lte':
                                 where_clauses.append(f"{key} <= ?")
                                 params.append(op_value)
-                
                 # Handle direct value matches for other fields
                 for key, value in query.items():
                     if key != 'username' and not isinstance(value, dict):
                         where_clauses.append(f"{key} = ?")
                         params.append(value)
-            
-            # Append WHERE clause if there are conditions
             if where_clauses:
                 sql_query += " WHERE " + " AND ".join(where_clauses)
-            
             # Add ORDER BY clause if sort is specified
             if self._sort_field:
                 direction = "DESC" if self._sort_direction == -1 else "ASC"
                 sql_query += f" ORDER BY {self._sort_field} {direction}"
-            
             # Execute the query
             cursor.execute(sql_query, params)
             results = cursor.fetchall()
-            
-            # Get column names
             column_names = [description[0] for description in cursor.description]
-            
-            # Convert results to list of dictionaries
             result_list = [dict(zip(column_names, row)) for row in results]
-            
-            # Reset sort for next query
+            # Reset sort and projection settings
             self._sort_field = None
             self._sort_direction = None
             self._projection = None
-            
             return result_list
         
         def sort(self, *args, **kwargs):
             """
-            Set sorting parameters for the query
-            Support both positional and keyword arguments:
+            Set sorting parameters for the query.
+            Supports both positional and keyword arguments:
             - sort("field", 1) or sort("field", -1)
             - sort(field="field", direction=1) or sort(field="field", direction=-1)
             """
             if args and len(args) >= 2:
-                # Positional arguments
                 self._sort_field = args[0]
                 self._sort_direction = args[1]
             elif kwargs:
-                # Keyword arguments
                 self._sort_field = kwargs.get('field')
                 self._sort_direction = kwargs.get('direction')
-            
             return self
     
-    # Create a proxy object that mimics MongoDB database
+    # Create a proxy object that provides a simple document-like interface over SQLite
     class DBProxy:
         def __init__(self, conn):
             self.conn = conn
