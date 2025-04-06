@@ -26,25 +26,51 @@ def initialize_db():
     conn = sqlite3.connect("database.db", check_same_thread=False)
     cursor = conn.cursor()
 
-    # Create users table if it does not exist
+    # Create tables with foreign keys and proper relationships
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
     )
     """)
 
-    # Create expenses table if it does not exist
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT,
-        category TEXT,
-        amount REAL,
-        date TEXT
+        user_id INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
     )
     """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS funds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        category TEXT NOT NULL,
+        type TEXT CHECK(type IN ('income', 'expense')) NOT NULL,
+        date TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS finpet (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        pet_name TEXT NOT NULL,
+        balance REAL DEFAULT 0,
+        last_fed TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+    """)
+
+    # Enable foreign key constraints
+    cursor.execute("PRAGMA foreign_keys = ON")
     conn.commit()
     return conn
 
@@ -52,21 +78,24 @@ def initialize_db():
 db_conn = initialize_db()
 
 # --- Import Modules for Authentication and Utility Functions ---
-# Update these modules (auth.py, utils.py, etc.) so that they use SQLite and SQL queries
 from auth import login, register, is_authenticated, logout
 import utils
 
 # --- Initialize Session State Variables ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "username" not in st.session_state:
-    st.session_state.username = None
-if "theme_mode" not in st.session_state:
-    st.session_state.theme_mode = "light"
-if "zen_mode" not in st.session_state:
-    st.session_state.zen_mode = False
+required_session_vars = {
+    "logged_in": False,
+    "username": None,
+    "theme_mode": "light",
+    "zen_mode": False,
+    "show_registration": False,
+    "current_page": "Home"
+}
 
-# Optionally, store the database connection in session state (if your modules expect it)
+for key, value in required_session_vars.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
+
+# Store the database connection in session state
 st.session_state.db_conn = db_conn
 
 # --- Authentication Screens ---
@@ -80,7 +109,7 @@ def show_login_page():
         
         if submit_button:
             if username and password:
-                if login(username, password):  # Ensure login() is updated to use SQLite
+                if login(username, password):
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.success(f"Welcome back, {username}!")
@@ -110,7 +139,7 @@ def show_registration_page():
                 if password != confirm_password:
                     st.error("Passwords do not match. Please try again.")
                 else:
-                    if register(username, password):  # Ensure register() uses SQLite
+                    if register(username, password):
                         st.success("Registration successful! Please login.")
                         st.session_state.show_registration = False
                         st.rerun()
@@ -126,15 +155,7 @@ def show_registration_page():
         st.rerun()
 
 # --- Main App Flow ---
-# Initialize session state for login status
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-# Conditional rendering based on login state
 if not st.session_state.logged_in:
-    if "show_registration" not in st.session_state:
-        st.session_state.show_registration = False
-        
     if st.session_state.show_registration:
         show_registration_page()
     else:
@@ -150,9 +171,10 @@ else:
         st.write(f"👤 {st.session_state.username}")
         if st.button("Logout", key="logout_top"):
             logout()
-            st.session_state.logged_in = False
-            st.session_state.username = None
-            st.rerun()  # <-- Updated here
+            st.session_state.clear()
+            st.session_state.update(required_session_vars)
+            st.rerun()
+
     # Horizontal navigation menu with functional buttons
     nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
     
@@ -209,7 +231,6 @@ else:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Theme toggle
             theme_mode = st.radio(
                 "Theme",
                 ["Light Mode", "Dark Mode"],
@@ -219,17 +240,15 @@ else:
             st.session_state.theme_mode = "light" if theme_mode == "Light Mode" else "dark"
         
         with col2:
-            # Display zen mode status
             if st.session_state.zen_mode:
                 st.success("🧘 Zen Mode is active")
             else:
                 st.info("🧘 Zen Mode is inactive")
         
-        # Hidden logout button as a backup
         if st.button("Logout", key="logout_button"):
             logout()
-            st.session_state.logged_in = False
-            st.session_state.username = None
+            st.session_state.clear()
+            st.session_state.update(required_session_vars)
             st.rerun()
     
     # Divider after navigation
@@ -257,14 +276,10 @@ else:
     
     with col2:
         st.info("Click on any of the navigation links above to access different features.")
-        
-        # Quick stats (ensure these functions are updated to use SQLite queries)
         st.metric(label="Current Balance", value=f"${utils.get_current_balance():.2f}")
         st.metric(
             label="This Week's Expenses", 
             value=f"${utils.get_weekly_expenses():.2f}",
             delta=f"{utils.get_expense_trend():.1f}%"
         )
-        
-        # Get started button
         st.button("Go to Home Dashboard →", on_click=lambda: st.switch_page("pages/01_Home.py"))
