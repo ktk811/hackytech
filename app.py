@@ -7,7 +7,7 @@ st.set_page_config(
     page_title="Personal Finance Manager",
     page_icon="💰",
     layout="wide",
-    initial_sidebar_state="collapsed"  # Start with sidebar collapsed
+    initial_sidebar_state="collapsed"
 )
 
 # Load custom CSS
@@ -16,73 +16,79 @@ def load_css():
     if os.path.exists(css_file):
         with open(css_file) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-
-# Apply custom styling
 load_css()
 
 # --- SQLite Database Initialization ---
 def initialize_db():
-    # Create (or open) the SQLite database file
     conn = sqlite3.connect("database.db", check_same_thread=False)
     cursor = conn.cursor()
-
-    # Create tables with foreign keys and proper relationships
+    
+    # Enable foreign keys
+    cursor.execute("PRAGMA foreign_keys = ON")
+    
+    # Create all tables
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL
-    )
-    """)
+        password TEXT NOT NULL,
+        zen_mode INTEGER DEFAULT 0,
+        wants_budget REAL DEFAULT 100.0
+    )""")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        category TEXT NOT NULL,
+        description TEXT NOT NULL,
         amount REAL NOT NULL,
         date TEXT NOT NULL,
+        category TEXT,
+        type TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
+    )""")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS funds (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        amount REAL NOT NULL,
-        category TEXT NOT NULL,
-        type TEXT CHECK(type IN ('income', 'expense')) NOT NULL,
-        date TEXT NOT NULL,
+        balance REAL DEFAULT 0,
         FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
+    )""")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        target_amount REAL NOT NULL,
+        current_amount REAL DEFAULT 0,
+        date_created TEXT,
+        completed INTEGER DEFAULT 0,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )""")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS finpet (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        pet_name TEXT NOT NULL,
-        balance REAL DEFAULT 0,
+        level INTEGER DEFAULT 1,
+        xp INTEGER DEFAULT 0,
+        next_level_xp INTEGER DEFAULT 75,
+        name TEXT DEFAULT 'Penny',
         last_fed TEXT,
+        rewards TEXT DEFAULT '[]',
         FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
+    )""")
 
-    # Enable foreign key constraints
-    cursor.execute("PRAGMA foreign_keys = ON")
     conn.commit()
     return conn
 
-# Global database connection (SQLite)
+# Initialize database
 db_conn = initialize_db()
 
-# --- Import Modules for Authentication and Utility Functions ---
-from auth import login, register, is_authenticated, logout
-import utils
-
-# --- Initialize Session State Variables ---
-required_session_vars = {
+# --- Session State Initialization ---
+session_vars = {
     "logged_in": False,
     "username": None,
     "theme_mode": "light",
@@ -91,75 +97,99 @@ required_session_vars = {
     "current_page": "Home"
 }
 
-for key, value in required_session_vars.items():
+for key, value in session_vars.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
-# Store the database connection in session state
-st.session_state.db_conn = db_conn
+# --- Authentication Functions ---
+def hash_password(password):
+    import hashlib
+    return hashlib.sha256(password.encode()).hexdigest()
 
-# --- Authentication Screens ---
-def show_login_page():
-    st.title("🔐 Login to Your Finance Dashboard")
-    
-    with st.form("login_form"):
-        username = st.text_input("Username", key="login_username")
-        password = st.text_input("Password", type="password", key="login_password")
-        submit_button = st.form_submit_button("Login")
+def register(username, password):
+    try:
+        cursor = db_conn.cursor()
+        hashed_pw = hash_password(password)
         
-        if submit_button:
-            if username and password:
-                if login(username, password):
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.success(f"Welcome back, {username}!")
-                    st.rerun()
-                else:
-                    st.error("Invalid username or password. Please try again.")
-            else:
-                st.warning("Please enter both username and password.")
+        # Insert user
+        cursor.execute("""
+            INSERT INTO users (username, password)
+            VALUES (?, ?)
+        """, (username, hashed_pw))
+        
+        # Initialize funds
+        cursor.execute("""
+            INSERT INTO funds (user_id, balance)
+            VALUES ((SELECT id FROM users WHERE username = ?), 0)
+        """, (username,))
+        
+        # Initialize FinPet
+        cursor.execute("""
+            INSERT INTO finpet (user_id, name)
+            VALUES ((SELECT id FROM users WHERE username = ?), 'Penny')
+        """, (username,))
+        
+        db_conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+def login(username, password):
+    cursor = db_conn.cursor()
+    hashed_pw = hash_password(password)
     
-    st.markdown("---")
-    st.markdown("Don't have an account?")
+    cursor.execute("""
+        SELECT id, zen_mode FROM users 
+        WHERE username = ? AND password = ?
+    """, (username, hashed_pw))
+    
+    user = cursor.fetchone()
+    if user:
+        st.session_state.zen_mode = bool(user[1])
+        return True
+    return False
+
+def logout():
+    st.session_state.clear()
+    st.session_state.update(session_vars)
+
+# --- Auth Pages ---
+def show_login_page():
+    st.title("🔐 Login")
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.form_submit_button("Login"):
+            if login(username, password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
     if st.button("Register"):
         st.session_state.show_registration = True
         st.rerun()
 
 def show_registration_page():
-    st.title("📝 Create Your Account")
-    
-    with st.form("registration_form"):
-        username = st.text_input("Username", key="reg_username")
-        password = st.text_input("Password", type="password", key="reg_password")
-        confirm_password = st.text_input("Confirm Password", type="password", key="reg_confirm_password")
-        submit_button = st.form_submit_button("Register")
-        
-        if submit_button:
-            if username and password and confirm_password:
-                if password != confirm_password:
-                    st.error("Passwords do not match. Please try again.")
+    st.title("📝 Register")
+    with st.form("register_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        confirm = st.text_input("Confirm Password", type="password")
+        if st.form_submit_button("Register"):
+            if password == confirm:
+                if register(username, password):
+                    st.success("Registration successful! Please login")
+                    st.session_state.show_registration = False
+                    st.rerun()
                 else:
-                    if register(username, password):
-                        st.success("Registration successful! Please login.")
-                        st.session_state.show_registration = False
-                        st.rerun()
-                    else:
-                        st.error("Username already exists. Please choose another one.")
+                    st.error("Username exists")
             else:
-                st.warning("Please fill in all fields.")
-    
-    st.markdown("---")
-    st.markdown("Already have an account?")
-    if st.button("Login"):
-        st.session_state.show_registration = False
-        st.rerun()
+                st.error("Passwords mismatch")
 
-# --- Main App Flow ---
+# --- Main App ---
 if not st.session_state.logged_in:
-    if st.session_state.show_registration:
-        show_registration_page()
-    else:
-        show_login_page()
+    show_registration_page() if st.session_state.show_registration else show_login_page()
 else:
     # Header with user info and navigation
     header_col1, header_col2 = st.columns([3, 1])
